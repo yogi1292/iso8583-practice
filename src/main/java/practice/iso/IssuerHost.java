@@ -3,6 +3,7 @@ package practice.iso;
 import java.io.EOFException;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.nio.file.Paths;
 
 import org.jpos.iso.ISOException;
 import org.jpos.iso.ISOMsg;
@@ -25,7 +26,7 @@ public final class IssuerHost implements AutoCloseable {
     private volatile boolean running;
 
     public IssuerHost(boolean verbose) {
-        this(new AuthEngine(CardStore.withTestCards()), verbose);
+        this(new AuthEngine(CardStore.withTestCards(), Paths.get("output")), verbose);
     }
 
     IssuerHost(AuthEngine engine, boolean verbose) {
@@ -134,6 +135,12 @@ public final class IssuerHost implements AutoCloseable {
         System.out.println("Test cards:");
         System.out.print(CardStore.sheet(host.engine().cards().all()));
         System.out.println("A purchase or withdrawal of exactly INR 777.00 is answered 5 seconds late (timeout test).");
+        System.out.println("Practice exchange rates (INR per unit):");
+        for (Iso.Currency c : Iso.currencies()) {
+            System.out.println("  " + c.alpha() + " (" + c.code() + ")  " + Iso.rateText(Iso.rateField(c.rate4())));
+        }
+        System.out.println("End-of-day cutover (0800, DE 70 = 201) writes scheme files to "
+                + host.engine().outputDir().toAbsolutePath());
         System.out.println("Listening on port " + actual + ". Press Ctrl+C to stop.");
         Thread.currentThread().join();
     }

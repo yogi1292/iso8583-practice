@@ -83,8 +83,10 @@ final class MessagePrinter {
 
     private static String display(ISOMsg m, int field) {
         if (field == 2) {
-            String pan = m.getString(2);
-            return pan.length() > 10 ? pan.substring(0, 6) + "*".repeat(pan.length() - 10) + pan.substring(pan.length() - 4) : pan;
+            return Iso.maskPan(m.getString(2));
+        }
+        if (field == 10) {
+            return "[" + m.getString(10) + "]  (rate " + Iso.rateText(m.getString(10)) + ")";
         }
         if (field == 52) {
             return ISOUtil.hexString(m.getBytes(52)) + "  (format 0 PIN block, not encrypted here)";

@@ -15,7 +15,6 @@ final class MessageFactory {
     static final String TERMINAL_ID = "TERM0001";
     static final String MERCHANT_ID = "MERCHANT0000001";
     static final String MERCHANT_NAME_LOCATION = String.format("%-25s%-13s%2s", "PRACTICE MART", "MUMBAI", "IN");
-    static final String CURRENCY_INR = "356";
 
     private static final DateTimeFormatter TRANSMISSION = DateTimeFormatter.ofPattern("MMddHHmmss");
     private static final DateTimeFormatter LOCAL_TIME = DateTimeFormatter.ofPattern("HHmmss");
@@ -46,6 +45,58 @@ final class MessageFactory {
     }
 
     /**
+     * 0100 purchase at a foreign merchant in the merchant's currency.
+     * DE 4 and DE 49 are in that currency; the network converts and adds
+     * DE 6 (cardholder billing amount, INR), DE 10 (conversion rate) and
+     * DE 51 (billing currency). Here the terminal fills those in, playing
+     * the network's part.
+     */
+    ISOMsg internationalPurchase(String pan, String expiry, Iso.Currency ccy, long foreignAmount, String pin)
+            throws ISOException {
+        return foreignCurrency(cardTransaction("0100", "000000", "5411", pan, expiry, foreignAmount, pin), ccy, foreignAmount);
+    }
+
+    /** 0200 ATM cash withdrawal abroad, in the local currency. */
+    ISOMsg internationalCashWithdrawal(String pan, String expiry, Iso.Currency ccy, long foreignAmount, String pin)
+            throws ISOException {
+        return foreignCurrency(cardTransaction("0200", "010000", "6011", pan, expiry, foreignAmount, pin), ccy, foreignAmount);
+    }
+
+    /**
+     * 0100 DCC purchase: the cardholder is abroad but chose to pay in INR at
+     * the terminal. The merchant's DCC provider converted at its own rate, so
+     * DE 4 is in INR and DE 49 = 356, while DE 19 and DE 43 still show a
+     * foreign merchant.
+     *
+     * DE 48 carries the DCC details in this practice layout:
+     * "DCC" + original currency (3) + original amount (12) + DCC rate (8, DE 10 format) + margin in bps (4).
+     * Real networks carry DCC indicators in their own network-specific fields.
+     */
+    ISOMsg dccPurchase(String pan, String expiry, Iso.Currency ccy, long foreignAmount, String pin) throws ISOException {
+        long dccRate = Iso.dccRate4(ccy);
+        ISOMsg m = cardTransaction("0100", "000000", "5411", pan, expiry, Iso.toInr(foreignAmount, dccRate), pin);
+        abroad(m, ccy);
+        m.set(48, "DCC" + ccy.code() + String.format("%012d", foreignAmount) + Iso.rateField(dccRate)
+                + String.format("%04d", Iso.DCC_MARGIN_BPS));
+        return m;
+    }
+
+    private static ISOMsg foreignCurrency(ISOMsg m, Iso.Currency ccy, long foreignAmount) throws ISOException {
+        abroad(m, ccy);
+        m.set(49, ccy.code());
+        m.set(6, String.format("%012d", Iso.toInr(foreignAmount, ccy.rate4())));
+        m.set(10, Iso.rateField(ccy.rate4()));
+        m.set(51, Iso.INR);
+        return m;
+    }
+
+    /** DE 19 acquiring institution country and DE 43 merchant location for a merchant abroad. */
+    private static void abroad(ISOMsg m, Iso.Currency ccy) throws ISOException {
+        m.set(19, ccy.country());
+        m.set(43, String.format("%-25s%-13s%2s", "PRACTICE STORE", ccy.city(), ccy.countryAlpha()));
+    }
+
+    /**
      * 0420 reversal advice for an earlier request.
      *
      * @param keepAmount null for a full reversal, or the amount that should stay
@@ -54,7 +105,7 @@ final class MessageFactory {
      */
     ISOMsg reversal(ISOMsg original, Long keepAmount, String reason) throws ISOException {
         ISOMsg m = base("0420");
-        for (int field : new int[] {2, 3, 4, 12, 13, 18, 22, 25, 32, 37, 41, 42, 43, 49}) {
+        for (int field : new int[] {2, 3, 4, 6, 10, 12, 13, 18, 19, 22, 25, 32, 37, 41, 42, 43, 48, 49, 51}) {
             if (original.hasField(field)) {
                 m.set(field, original.getString(field));
             }
@@ -88,7 +139,7 @@ final class MessageFactory {
         m.set(41, TERMINAL_ID);
         m.set(42, MERCHANT_ID);
         m.set(43, MERCHANT_NAME_LOCATION);
-        m.set(49, CURRENCY_INR);
+        m.set(49, Iso.INR);
         if (pin != null) {
             m.set(52, PinBlock.encode(pin, pan));
         }

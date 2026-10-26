@@ -11,6 +11,8 @@ final class Card {
     final String pin;
     final Status status;
     final long perTxnLimit;
+    /** False means the cardholder has turned off use abroad and in foreign currency. */
+    final boolean internationalEnabled;
 
     /** Posted balance. Changes only when money actually moves. */
     long ledger;
@@ -18,7 +20,8 @@ final class Card {
     long holds;
     int wrongPinTries;
 
-    Card(String label, String pan, String expiry, String pin, Status status, long ledger, long perTxnLimit) {
+    Card(String label, String pan, String expiry, String pin, Status status, long ledger, long perTxnLimit,
+            boolean internationalEnabled) {
         this.label = label;
         this.pan = pan;
         this.expiry = expiry;
@@ -26,6 +29,7 @@ final class Card {
         this.status = status;
         this.ledger = ledger;
         this.perTxnLimit = perTxnLimit;
+        this.internationalEnabled = internationalEnabled;
     }
 
     long available() {
